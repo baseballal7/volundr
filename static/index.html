@@ -1,0 +1,238 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Völundr — The Smith's Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&family=Cinzel+Decorative:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07090d; --card:#141a24; --line:#232b38; --line-hi:#333c4a; --txt:#eef2f8; --ink:#eef2f8;
+  --dim:#8b94a3; --faint:#586173; --gold:#c9a227; --gold-hi:#f4d675; --gold-lo:#7d6417;
+  --green:#4ec26a; --red:#f85149; --amber:#e3b341; --purple:#bc8cff; --cyan:#4cc4e0; --orange:#ff8a3d;
+  --disp:"Cinzel",serif; --deco:"Cinzel Decorative","Cinzel",serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{color:var(--ink);font:14px/1.55 Inter,-apple-system,"Segoe UI",Roboto,sans-serif;padding:22px 22px 70px;max-width:1200px;margin:0 auto;position:relative;overflow-x:hidden;
+  background:radial-gradient(1200px 640px at 78% -10%,#2a1a14 0%,rgba(42,26,20,0) 60%),radial-gradient(900px 520px at 6% 2%,#181307 0%,rgba(24,19,7,0) 55%),var(--bg)}
+.sky{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.aur{position:absolute;border-radius:50%;filter:blur(75px);opacity:.4;mix-blend-mode:screen}
+.aur.a{width:760px;height:500px;left:-140px;top:-220px;background:radial-gradient(circle,#6b3a2f 0,rgba(107,58,47,0) 70%);animation:d1 28s ease-in-out infinite}
+.aur.b{width:720px;height:480px;right:-160px;top:-180px;background:radial-gradient(circle,#7a5a1c 0,rgba(122,90,28,0) 70%);animation:d2 32s ease-in-out infinite}
+.aur.c{width:900px;height:560px;left:32%;top:-280px;background:radial-gradient(circle,#4f2a20 0,rgba(79,42,32,0) 70%);animation:d3 36s ease-in-out infinite}
+@keyframes d1{0%,100%{transform:translate(0,0)}50%{transform:translate(80px,50px)}}
+@keyframes d2{0%,100%{transform:translate(0,0)}50%{transform:translate(-70px,40px)}}
+@keyframes d3{0%,100%{transform:translate(-50%,0) scale(1)}50%{transform:translate(-46%,36px) scale(1.07)}}
+.vig{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(1200px 820px at 50% -8%,transparent 42%,rgba(7,9,13,.9) 100%)}
+.grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.035;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+.masthead,#mainnav,#view,footer{position:relative;z-index:3}
+.masthead{display:flex;align-items:center;gap:16px;padding:2px 2px 16px}
+.crest{width:54px;height:54px;flex:none;filter:drop-shadow(0 0 16px rgba(201,162,39,.4))}
+.crest .ring{transform-origin:50px 50px;animation:spin 70s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.masthead h1{font-family:var(--deco);font-weight:900;font-size:30px;letter-spacing:.16em;line-height:1;background:linear-gradient(180deg,var(--gold-hi),var(--gold) 58%,var(--gold-lo));-webkit-background-clip:text;background-clip:text;color:transparent}
+.masthead .sub{color:var(--faint);font-size:10.5px;letter-spacing:.34em;text-transform:uppercase;margin-top:7px;font-family:var(--disp)}
+.masthead .spacer{flex:1}
+.masthead .meta{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;line-height:1.7}
+#mainnav{display:flex;gap:2px;margin:4px 0 14px;flex-wrap:wrap;position:sticky;top:0;z-index:9;padding:8px 0;background:linear-gradient(180deg,rgba(7,9,13,.94),rgba(7,9,13,.72) 70%,transparent);backdrop-filter:blur(8px)}
+.tab{font-family:var(--disp);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:9px 15px;border-radius:8px;cursor:pointer;user-select:none;transition:.16s;position:relative;background:none;border:0}
+.tab:hover{color:var(--ink)}
+#mainnav .tab.on{color:var(--gold-hi)}
+#mainnav .tab.on::after{content:"";position:absolute;left:13px;right:13px;bottom:3px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--gold-lo),var(--gold),var(--gold-lo));box-shadow:0 0 8px rgba(201,162,39,.5)}
+.tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;align-items:center}
+.tabs .tab{font-size:11px;padding:6px 12px;border:1px solid var(--line);border-radius:8px}
+.tabs .tab.on{color:var(--gold-hi);border-color:var(--gold-lo);background:rgba(201,162,39,.08)}
+.tabs .tab b{font-family:var(--mono);color:var(--faint);margin-left:6px;font-weight:500}
+#view{animation:fade .2s ease}
+@keyframes fade{from{opacity:.4;transform:translateY(3px)}to{opacity:1;transform:none}}
+.card{background:linear-gradient(160deg,#151b25 0%,#0f141c 100%);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:16px;position:relative;box-shadow:0 26px 60px -26px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.04)}
+.card::before{content:"";position:absolute;top:0;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(244,214,117,.42),transparent)}
+.detail{background:rgba(9,12,17,.5);border:1px solid var(--line);border-radius:11px;padding:11px 14px;font-size:12.5px;margin:5px 0 9px}
+h3.sec{font-family:var(--disp);font-weight:700;font-size:16px;letter-spacing:.05em;margin-top:14px;color:var(--gold-hi);display:flex;align-items:baseline;gap:9px}
+h3.sec::before{content:"ᚹ";color:var(--gold);font-size:12px;filter:drop-shadow(0 0 8px rgba(201,162,39,.5))}
+h3.sec .hint{font-family:Inter;font-weight:400}
+.hint{font-size:12px;color:var(--dim)} .empty{color:var(--dim);padding:36px;text-align:center;font-family:var(--disp);letter-spacing:.08em}
+.sub{color:var(--dim);font-size:12px}
+.crumb{color:var(--gold);cursor:pointer;font-family:var(--disp);font-size:11px;letter-spacing:.12em;text-transform:uppercase}.crumb:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.92em;color:var(--gold-hi);background:rgba(201,162,39,.08);padding:1px 5px;border-radius:4px}
+input,select{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-family:var(--mono);font-size:12px;outline:none}
+input:focus{border-color:var(--gold-lo)}
+button.btn{font:inherit;font-family:var(--disp);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-hi);background:rgba(201,162,39,.08);border:1px solid var(--gold-lo);border-radius:8px;padding:7px 13px;cursor:pointer}
+button.btn:hover{background:rgba(201,162,39,.16)} button.btn[disabled]{opacity:.5;cursor:default}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+th{font-family:var(--disp);color:var(--faint);text-align:left;font-weight:600;font-size:10px;letter-spacing:.13em;text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:54px;background:rgba(11,14,20,.92);backdrop-filter:blur(6px)}
+td{padding:9px 8px;border-bottom:1px solid rgba(35,43,56,.6);vertical-align:top}
+td.r,th.r{text-align:right} td.r{font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr:nth-child(even) td{background:rgba(255,255,255,.012)}
+.row{cursor:pointer;transition:.14s}.row:hover td{background:rgba(255,255,255,.03)}
+.statrowx{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+.stat{flex:1;min-width:120px;background:linear-gradient(180deg,#161d28,#10151d);border:1px solid var(--line);border-radius:13px;padding:13px 15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);cursor:pointer}
+.stat b{font-family:var(--mono);font-weight:700;font-size:23px;display:block;line-height:1.15}
+.stat span{font-family:var(--disp);font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.14em}
+.stat.on{border-color:var(--gold-lo)}
+.chip{display:inline-block;border:1px solid;border-radius:999px;padding:1px 9px;font-size:11px;margin:1px 3px 1px 0;font-family:var(--mono);white-space:nowrap}
+.c-trainer{color:#9fd9ff;border-color:rgba(76,196,224,.4);background:rgba(76,196,224,.08)}
+.c-vendor{color:#f6e6b0;border-color:rgba(201,162,39,.4);background:rgba(201,162,39,.08)}
+.c-drop{color:#ff8a84;border-color:rgba(248,81,73,.36);background:rgba(248,81,73,.08)}
+.c-quest{color:#e7d3ff;border-color:rgba(188,140,255,.4);background:rgba(188,140,255,.08)}
+.c-fishing,.c-object,.c-unknown{color:var(--dim);border-color:var(--line-hi);background:rgba(255,255,255,.03)}
+.c-ok{color:#c7f2d1;border-color:rgba(78,194,106,.4);background:rgba(78,194,106,.08)}
+.c-warn{color:var(--amber);border-color:rgba(227,179,65,.36);background:rgba(227,179,65,.08)}
+.c-off{color:var(--faint);border-color:var(--line)}
+.bar{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:3px;position:relative}
+.bar i{display:block;height:100%;border-radius:3px;position:relative;background:linear-gradient(90deg,var(--gold-lo),var(--gold-hi))}
+.bar i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);animation:sheen 2.8s linear infinite}
+@keyframes sheen{0%{transform:translateX(-100%)}60%,100%{transform:translateX(240%)}}
+.saga{position:relative;border-radius:20px;padding:28px 32px;margin-bottom:16px;overflow:hidden;background:linear-gradient(160deg,rgba(34,22,20,.66),rgba(12,14,20,.66));border:1px solid rgba(201,162,39,.16);box-shadow:0 36px 90px -30px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);backdrop-filter:blur(6px);display:flex;gap:26px;align-items:center}
+.saga::before{content:"";position:absolute;top:0;left:34px;right:34px;height:1px;background:linear-gradient(90deg,transparent,rgba(244,214,117,.55),transparent)}
+.saga::after{content:"ᚹᛟᛚᚢᚾᛞᚱ";position:absolute;right:-6px;bottom:-34px;font-family:var(--disp);font-size:130px;color:rgba(201,162,39,.03);letter-spacing:.08em;pointer-events:none}
+.eyebrow{font-family:var(--disp);font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.pname{font-family:var(--deco);font-weight:900;font-size:40px;line-height:1;letter-spacing:.02em}
+.pspec{font-family:var(--mono);font-size:12.5px;color:var(--dim);margin-top:10px}
+.avatar{width:88px;height:88px;border-radius:50%;flex:none;background:#0a0d12 center/cover;box-shadow:0 0 0 2px #7d6417,0 0 0 5px rgba(201,162,39,.16),0 14px 30px -8px rgba(0,0,0,.7)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.tile{background:linear-gradient(180deg,#161d28,#10151d);border:1px solid var(--line);border-radius:13px;padding:14px 16px;cursor:pointer;transition:.14s}
+.tile:hover{border-color:var(--gold-lo)}
+.tile h4{font-family:var(--disp);font-size:14px;letter-spacing:.05em;color:var(--gold-hi);display:flex;justify-content:space-between;align-items:baseline}
+.tile h4 small{font-family:var(--mono);color:var(--dim);font-size:11px;font-weight:500}
+.tile .nums{display:flex;gap:14px;margin-top:9px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.tile .nums b{color:var(--ink);font-weight:600;display:block;font-size:16px}
+.sk{font-family:var(--mono);font-size:11px}
+.sk .o{color:var(--orange)} .sk .y{color:var(--amber)} .sk .g{color:var(--green)} .sk .x{color:var(--faint)}
+.money{font-family:var(--mono);white-space:nowrap}
+.money .g{color:var(--gold-hi)} .money .s{color:#c0c6d0} .money .c{color:#c58b5a}
+.loadwrap{padding:44px 20px;text-align:center}
+.loadwrap .lmsg{font-family:var(--disp);letter-spacing:.14em;text-transform:uppercase;font-size:13px;color:var(--dim);margin-bottom:16px}
+.loadbar{height:4px;max-width:340px;margin:0 auto;border-radius:3px;background:rgba(255,255,255,.07);overflow:hidden;position:relative}
+.loadbar::after{content:"";position:absolute;top:0;left:-42%;height:100%;width:42%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--gold-hi),transparent);animation:load 1.15s ease-in-out infinite}
+@keyframes load{0%{left:-42%}100%{left:100%}}
+.err{border-color:rgba(248,81,73,.4);color:#ff8a84}
+footer{margin-top:30px;color:var(--faint);font-size:11px;font-family:var(--mono);display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--gold)}
+.rg{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 4px}
+.rg .r{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px dashed var(--line-hi);border-radius:7px;padding:2px 8px}
+.x{color:var(--faint);cursor:pointer;font-size:11px;margin-left:8px}.x:hover{color:var(--red)}
+.stop{border-left:3px solid var(--gold-lo);padding-left:12px;margin:12px 0}
+.stop h4{font-family:var(--disp);font-size:13px;letter-spacing:.06em;color:var(--gold-hi)}
+.stop ul{margin:4px 0 0 0;padding-left:18px;font-size:12.5px}
+.stop li span{color:var(--dim)}
+</style></head><body>
+<div class="sky"><div class="aur a"></div><div class="aur b"></div><div class="aur c"></div></div>
+<div class="vig"></div><div class="grain"></div>
+<div class="masthead">
+ <svg class="crest" viewBox="0 0 100 100" aria-hidden="true">
+  <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4d675"/><stop offset=".6" stop-color="#c9a227"/><stop offset="1" stop-color="#7d6417"/></linearGradient></defs>
+  <circle cx="50" cy="50" r="47" fill="#0a0d12" stroke="#1c222c" stroke-width="3"/>
+  <g class="ring" fill="url(#cg)" font-family="Cinzel" font-size="8" opacity=".5" text-anchor="middle"><text x="50" y="16">ᚹ</text><text x="84" y="53">ᛟ</text><text x="50" y="90">ᛚ</text><text x="16" y="53">ᚢ</text><text x="74" y="26">ᚾ</text><text x="74" y="80">ᛞ</text><text x="26" y="80">ᚱ</text><text x="26" y="26">ᛏ</text></g>
+  <!-- anvil + hammer -->
+  <path d="M30 62h40l-4 8H34zM36 54h28l6 8H30zM44 46h12v8H44z" fill="url(#cg)" stroke="#0a0d12" stroke-width="1.2"/>
+  <path d="M58 28l10 10-5 5-10-10zM66 24l6 6-3 3-6-6z" fill="url(#cg)" stroke="#0a0d12" stroke-width="1.2" style="filter:drop-shadow(0 0 5px rgba(244,214,117,.6))"/>
+ </svg>
+ <div><h1>VÖLUNDR</h1><div class="sub">᛬ The Smith's Ledger ᛬</div></div>
+ <div class="spacer"></div>
+ <div class="meta" id="meta">WoW Forever · recipes you hold, recipes you lack<br>and the road to each</div>
+</div>
+<div id="mainnav"></div>
+<div id="view"><div class="loadwrap"><div class="lmsg">Stoking the forge</div><div class="loadbar"></div></div></div>
+<footer>
+ <span>Völundr <span id="ver"></span></span>
+ <span>Character data © Blizzard Entertainment via the Battle.net API</span>
+ <span><a href="https://foreverdb.net" target="_blank" rel="noopener">Data from ForeverDB.net</a></span>
+ <span><a href="#/probe">endpoint probe</a></span>
+</footer>
+<script>
+const $=s=>document.querySelector(s), V=$('#view');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=async(p,o)=>{const r=await fetch('/api'+p,o);if(!r.ok){let t=await r.text();try{t=JSON.parse(t).detail||t}catch{}throw new Error(r.status+' '+t)}return r.json()};
+const post=(p,b)=>api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):null});
+const title=s=>s?s.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'';
+const ago=t=>{if(!t)return 'never';const d=(Date.now()/1000-t);return d<90?'just now':d<5400?Math.round(d/60)+' min ago':d<172800?Math.round(d/3600)+' h ago':Math.round(d/86400)+' d ago'};
+const money=c=>{if(c==null)return '';c=Math.round(c);const g=Math.floor(c/1e4),s=Math.floor(c%1e4/100),cp=c%100;let o='';if(g)o+=`<span class="g">${g}g</span> `;if(g||s)o+=`<span class="s">${s}s</span> `;o+=`<span class="c">${cp}c</span>`;return `<span class="money">${o}</span>`};
+const loading=m=>V.innerHTML=`<div class="loadwrap"><div class="lmsg">${esc(m||'Reading the ledger')}</div><div class="loadbar"></div></div>`;
+const fail=e=>V.innerHTML=`<div class="card err"><b>Something broke</b><div class="hint" style="margin-top:6px">${esc(e.message||e)}</div></div>`;
+let HEALTH=null;
+async function health(){HEALTH=await api('/health');$('#ver').textContent='v'+HEALTH.version;
+  const b=HEALTH.blizzard?'<span class="chip c-ok">Battle.net key</span>':'<span class="chip c-off">no Battle.net key</span>';
+  const f=HEALTH.foreverdb?'<span class="chip c-ok">ForeverDB key</span>':'<span class="chip c-off">no ForeverDB key</span>';
+  const s=HEALTH.sync.running?`<span class="chip c-warn">sync: ${esc(HEALTH.sync.phase)} ${esc(HEALTH.sync.detail)}</span>`:'';
+  $('#meta').innerHTML=`${b} ${f} ${s}`;return HEALTH}
+function nav(items){$('#mainnav').innerHTML=items.map(([l,h,on])=>`<a class="tab ${on?'on':''}" href="${h}" style="text-decoration:none">${esc(l)}</a>`).join('')}
+function skillBar(p){const pct=p.max_skill?Math.min(100,100*(p.skill||0)/p.max_skill):0;return `<div class="bar"><i style="width:${pct}%"></i></div>`}
+const GROUPS=[['now','Learn now','trainer or vendor source at your current skill'],['later','Needs skill','trainer or vendor source above your skill'],['farm','Farm it','drop, quest or fishing only'],['unknown','No source yet','ForeverDB has no source for it (or key missing)'],['known','Known','already in your book']];
+
+// ---- views ----
+async function home(){nav([['Characters','#/',1]]);loading('Calling the roll');
+  try{const cs=await api('/chars');
+    let h=`<div class="card"><h3 class="sec" style="margin-top:0">Characters <span class="hint">Forever is realmless — add as <code>first-surname</code></span></h3>
+      <div class="grid" style="margin-top:12px">`+(cs.length?cs.map(c=>`<div class="tile" onclick="location.hash='#/c/${c.slug}'">
+        <h4>${esc(c.display||c.slug)} <small>${c.level?'lvl '+c.level:''}</small></h4>
+        <div class="hint">${esc([c.race,c.cls].filter(Boolean).join(' '))}${c.guild?' · &lt;'+esc(c.guild)+'&gt;':''}</div>
+        ${c.last_error?`<div class="hint" style="color:#ff8a84;margin-top:6px">${esc(c.last_error)}</div>`:''}
+        <div style="margin-top:8px">${c.professions.map(p=>`<div class="hint" style="display:flex;justify-content:space-between"><span>${esc(p.prof_name)}</span><span class="sk">${p.skill??'?'} / ${p.max_skill??'?'}</span></div>${skillBar(p)}`).join('')}</div>
+        <div class="hint" style="margin-top:8px">synced ${ago(c.last_sync)} · ${esc(c.source||'')}</div></div>`).join(''):'<div class="empty">No characters yet</div>')+`</div>
+      <div style="display:flex;gap:8px;margin-top:16px;align-items:center"><input id="newc" placeholder="first-surname" style="width:240px"><button class="btn" onclick="addChar()">Add &amp; sync</button>
+      <button class="btn" onclick="syncStatic()">Refresh recipe data</button><span class="hint" id="addmsg"></span></div></div>`;
+    if(!HEALTH.blizzard)h+=`<div class="card"><h3 class="sec" style="margin-top:0">Keys pending</h3><div class="hint" style="margin-top:6px">Without <code>BNET_CLIENT_ID</code>/<code>BNET_CLIENT_SECRET</code> in the container's env file the card above comes from the public Armory page and no recipe list can be read. Without <code>FOREVERDB_API_KEY</code> missing recipes get no "where to learn it". Restart the container after adding them.</div></div>`;
+    V.innerHTML=h}catch(e){fail(e)}}
+async function addChar(){const v=$('#newc').value.trim();if(!v)return;$('#addmsg').textContent='syncing…';try{const r=await post('/chars',{slug:v});$('#addmsg').textContent=r.ok?'added':r.error;home()}catch(e){$('#addmsg').textContent=e.message}}
+async function syncStatic(){try{const r=await post('/sync/static');alert(r.started?'Recipe data refresh started (Blizzard static + ForeverDB). Takes a few minutes; watch the header.':'A sync is already running')}catch(e){alert(e.message)}}
+async function syncChar(slug){loading('Asking the Armory');try{await post('/sync/char/'+slug);await health();charView(slug)}catch(e){fail(e)}}
+
+async function charView(slug){loading('Opening the book');
+  try{const c=await api('/char/'+slug);nav([['Characters','#/'],[c.display||slug,'#/c/'+slug,1],['Next session','#/c/'+slug+'/next']]);
+    const missing=p=>p.universe?Math.max(0,p.universe-p.known):null;
+    V.innerHTML=`<div class="saga"><div class="avatar" style="${c.avatar?`background-image:url('${esc(c.avatar)}')`:''}"></div>
+      <div><div class="eyebrow">${esc(c.ruleset||'Forever')}${c.faction?' · '+esc(title(c.faction)):''}</div><div class="pname">${esc(c.display||slug)}</div>
+      <div class="pspec">${c.level?'Level '+c.level+' · ':''}${esc([c.race,c.cls].filter(Boolean).join(' '))}${c.guild?' · &lt;'+esc(c.guild)+'&gt;':''}</div>
+      <div class="hint" style="margin-top:8px">synced ${ago(c.last_sync)} from ${esc(c.source||'?')} <button class="btn" style="margin-left:10px;padding:4px 10px" onclick="syncChar('${slug}')">Sync now</button>
+      <span class="x" onclick="if(confirm('Remove ${esc(c.display)} from Völundr?'))api('/chars/${slug}',{method:'DELETE'}).then(()=>location.hash='#/')">remove</span></div>
+      ${c.last_error?`<div class="hint" style="color:#ff8a84;margin-top:6px">${esc(c.last_error)}</div>`:''}</div></div>
+      <div class="card"><h3 class="sec" style="margin-top:0">Professions <span class="hint">click one for the ledger</span></h3>
+      <div class="grid" style="margin-top:12px">${c.professions.length?c.professions.map(p=>`<div class="tile" onclick="location.hash='#/c/${slug}/p/${p.prof_slug}'">
+        <h4>${esc(p.prof_name)} <small>${p.skill??'?'} / ${p.max_skill??'?'}</small></h4>${skillBar(p)}
+        <div class="nums"><div><b>${p.known}</b>known</div><div><b>${missing(p)??'—'}</b>missing</div><div><b>${p.universe||'—'}</b>in game</div></div></div>`).join(''):
+        `<div class="empty">${HEALTH.blizzard?'No professions on this character yet (or not synced since level 10)':'Professions need the Battle.net key'}</div>`}</div></div>`}catch(e){fail(e)}}
+
+let LED=null, LGROUP='now', LQ='';
+async function ledgerView(slug,ps,group){loading('Turning the pages');
+  try{LED=await api(`/char/${slug}/prof/${ps}`);LQ='';
+    LGROUP=group||(GROUPS.map(g=>g[0]).find(g=>LED.counts[g]>0)||'all');
+    const c=LED.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],[title(ps),'#/c/'+slug+'/p/'+ps,1],['Next session','#/c/'+slug+'/next']]);
+    V.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
+      <h3 class="sec" style="margin-top:0">${esc(title(ps))} <span class="hint">${esc(c.display)} · skill <b class="sk">${LED.skill??'?'} / ${LED.max_skill??'?'}</b></span></h3>
+      <span class="hint">${LED.total} recipes in game · ${LED.known} known · ForeverDB matched ${LED.fdb_matched}/${LED.total}${LED.fdb_fetched?' (sources '+ago(LED.fdb_fetched)+')':' (no ForeverDB data yet)'}</span></div>
+      <div class="statrowx" id="groups"></div>
+      <div class="tabs"><input id="q" placeholder="filter recipes…" style="width:220px" oninput="LQ=this.value;renderRows()"><span class="hint" id="rowcount"></span></div>
+      <div id="rows"></div></div>`;
+    renderGroups();renderRows()}catch(e){fail(e)}}
+function renderGroups(){$('#groups').innerHTML=GROUPS.map(([g,l,t])=>`<div class="stat ${LGROUP===g?'on':''}" title="${esc(t)}" onclick="LGROUP='${g}';renderGroups();renderRows()"><b>${LED.counts[g]||0}</b><span>${esc(l)}</span></div>`).join('')+`<div class="stat ${LGROUP==='all'?'on':''}" onclick="LGROUP='all';renderGroups();renderRows()"><b>${LED.total}</b><span>All</span></div>`}
+function srcChip(s){const z=s.zone?` · ${esc(s.zone)}`:'';const extra=[s.skill?`skill ${s.skill}`:'',s.price!=null?money(s.price):'',s.limited?'limited':'',s.drop_chance?esc(String(s.drop_chance))+(/%/.test(String(s.drop_chance))?'':'%'):'',s.rep?'rep: '+esc(typeof s.rep==='object'?(s.rep.name||JSON.stringify(s.rep)):s.rep):'',s.seen===false?'unseen in Forever':''].filter(Boolean).join(' · ');
+  return `<span class="chip c-${esc(s.type)}" title="${esc(s.type)}">${esc(title(s.type))}: ${esc(s.name||'?')}${z}${extra?' · '+extra:''}</span>`}
+function sk(r){if(r.orange==null&&r.req==null)return '<span class="x">?</span>';return `<span class="sk"><span class="o">${r.orange??r.req??'?'}</span>${r.yellow?` <span class="y">${r.yellow}</span>`:''}${r.green?` <span class="g">${r.green}</span>`:''}${r.grey?` <span class="x">${r.grey}</span>`:''}</span>`}
+function renderRows(){const q=LQ.toLowerCase();const rows=LED.recipes.filter(r=>(LGROUP==='all'||r.group===LGROUP)&&(!q||(r.name+' '+(r.item_name||'')+' '+(r.category||'')).toLowerCase().includes(q)));
+  $('#rowcount').textContent=rows.length+' shown';
+  if(!rows.length){$('#rows').innerHTML=`<div class="empty">${LGROUP==='known'?'Nothing learned here yet':LGROUP==='unknown'?'Every missing recipe has a known source':'Nothing in this group'}</div>`;return}
+  $('#rows').innerHTML=`<table><thead><tr><th>Recipe</th><th>Skill</th><th>Category</th><th>Where / how</th><th class="r"></th></tr></thead><tbody>${rows.map((r,i)=>`<tr class="row" onclick="toggle(${r.recipe_id})"><td><b>${esc(r.name)}</b>${r.item_name&&r.item_name!==r.name?`<div class="hint">${esc(r.item_name)}</div>`:''}${r.needs_rank?'<span class="chip c-warn">next rank</span>':''}${r.changed?'<span class="chip c-warn" title="changed in Forever">changed</span>':''}${r.new?'<span class="chip c-ok">new in Forever</span>':''}</td>
+    <td>${sk(r)}</td><td class="hint">${esc(r.category||'')}${r.tier?`<div class="hint" style="font-size:11px">${esc(r.tier)}</div>`:''}</td>
+    <td>${r.sources.length?r.sources.map(srcChip).join(''):(r.other_faction?'<span class="chip c-drop">other faction only</span>':r.fdb?'<span class="chip c-unknown">no source listed</span>':'<span class="chip c-unknown">not in ForeverDB</span>')}</td>
+    <td class="r">${r.known?'<span class="chip c-ok">✓</span>':''}</td></tr><tr id="d${r.recipe_id}" style="display:none"><td colspan="5"><div class="detail">${r.reagents&&r.reagents.length?'<b>Reagents:</b> <div class="rg">'+r.reagents.map(x=>`<span class="r">${esc(x.qty||x.quantity||x.count||'')}× ${esc(x.name||(x.item&&x.item.name)||x.itemName||x.id||'?')}</span>`).join('')+'</div>':'<span class="hint">no reagent data</span>'}
+    <div class="hint" style="margin-top:6px">Blizzard recipe #${r.recipe_id}${r.item_id?' · item #'+r.item_id:''}${r.fdb?' · ForeverDB matched':' · no ForeverDB match (name/item differs or data not synced)'}</div></div></td></tr>`).join('')}</tbody></table>`}
+function toggle(id){const d=document.getElementById('d'+id);d.style.display=d.style.display==='none'?'':'none'}
+
+async function nextView(slug){loading('Plotting the route');
+  try{const n=await api('/char/'+slug+'/next');const c=n.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],['Next session','#/c/'+slug+'/next',1]]);
+    V.innerHTML=`<div class="card"><h3 class="sec" style="margin-top:0">Next session <span class="hint">everything learnable right now, grouped by who sells or teaches it</span></h3>
+      <div class="statrowx"><div class="stat"><b>${n.stops.length}</b><span>stops</span></div><div class="stat"><b>${n.stops.reduce((a,s)=>a+s.items.length,0)}</b><span>recipes</span></div><div class="stat"><b style="font-size:18px">${n.total_cost?money(n.total_cost):'—'}</b><span>vendor cost</span></div></div>
+      ${n.stops.length?n.stops.map(s=>`<div class="stop"><h4>${esc(title(s.type))} · ${esc(s.name||'?')} <span class="hint">${esc(s.zone||'')}${s.limited?' · limited stock':''}${s.cost?' · '+money(s.cost):''}</span></h4>
+        <ul>${s.items.map(i=>`<li>${esc(i.recipe)} <span>(${esc(title(i.prof))}${i.skill?', skill '+i.skill:''}${i.price!=null?', '+money(i.price):''}${i.limited?', limited':''})</span></li>`).join('')}</ul></div>`).join(''):
+        `<div class="empty">${n.professions.length?'Nothing learnable at your current skill — raise it, or check Farm it':'No professions synced'}</div>`}</div>
+      <div class="card"><h3 class="sec" style="margin-top:0">Farm it <span class="hint">drops and quests, best odds first</span></h3>
+      ${n.farm.length?`<table><thead><tr><th>Recipe</th><th>Profession</th><th>Source</th><th class="r">Chance</th></tr></thead><tbody>${n.farm.map(f=>`<tr><td><b>${esc(f.recipe)}</b>${f.req?`<div class="hint">needs ${f.req}</div>`:''}</td><td class="hint">${esc(title(f.prof))}</td><td>${srcChip(f)}</td><td class="r">${f.chance!=null?esc(String(f.chance))+(/%/.test(String(f.chance))?'':'%'):''}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No farmable recipes listed</div>'}</div>`}catch(e){fail(e)}}
+
+async function probeView(){nav([['Characters','#/'],['Probe','#/probe',1]]);loading('Knocking on Blizzard\'s door');
+  try{const p=await api('/probe');V.innerHTML=`<div class="card"><h3 class="sec" style="margin-top:0">Endpoint probe <span class="hint">the Forever API is community-documented; this is what answers today</span></h3><pre style="font-family:var(--mono);font-size:12px;white-space:pre-wrap;margin-top:10px">${esc(JSON.stringify(p,null,2))}</pre></div>`}catch(e){fail(e)}}
+
+async function route(){const h=location.hash||'#/';await health();const m=h.match(/^#\/c\/([^/]+)(?:\/(p)\/([^/]+)|\/(next))?/);
+  if(h==='#/probe')return probeView();
+  if(m){if(m[2])return ledgerView(m[1],m[3]);if(m[4])return nextView(m[1]);return charView(m[1])}
+  return home()}
+window.addEventListener('hashchange',route);route();
+setInterval(()=>{if(HEALTH&&HEALTH.sync&&HEALTH.sync.running)health()},5000);
+</script></body></html>

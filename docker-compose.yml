@@ -1,0 +1,24 @@
+services:
+  volundr-web:
+    build: .
+    container_name: volundr-web
+    restart: unless-stopped
+    ports:
+      - "8007:8007"
+    env_file:
+      # BNET_CLIENT_ID / BNET_CLIENT_SECRET (develop.battle.net client) + FOREVERDB_API_KEY — see .env.example.
+      # Optional so the app boots key-less: the character card then comes from the armory page
+      # and the recipe ledger stays empty until the keys land.
+      - path: ./.volundr.env
+        required: false
+    environment:
+      VOLUNDR_CHARS: ""          # comma-separated first-surname slugs to track from boot, e.g. "covenna-ravenshroud"
+      VOLUNDR_REGION: "us"
+      VOLUNDR_DB: "/data/volundr.db"
+      VOLUNDR_SYNC_HOURS: "6"
+    volumes:
+      - ./data:/data
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
