@@ -119,6 +119,12 @@ footer a{color:var(--gold)}
 .mapwrap svg{position:absolute;inset:0;width:100%;height:100%}
 .mapwrap .cap{position:absolute;left:0;right:0;bottom:0;padding:4px 9px;font-family:var(--disp);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-hi);background:linear-gradient(0deg,rgba(7,9,13,.85),rgba(7,9,13,0))}
 .mapwrap.sm{max-width:340px}
+.mapwrap{cursor:zoom-in}
+#lightbox{position:fixed;inset:0;z-index:60;background:rgba(7,9,13,.92);display:none;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;backdrop-filter:blur(6px)}
+#lightbox.on{display:flex}
+#lightbox .mapwrap{max-width:min(96vw,calc(94vh * 1.5));width:100%;margin:0;cursor:zoom-out;box-shadow:0 40px 120px -20px rgba(0,0,0,.9)}
+#lightbox .mapwrap .cap{font-size:13px;padding:8px 14px}
+#lightbox .hintx{position:fixed;top:14px;right:18px;color:var(--faint);font-family:var(--mono);font-size:11px}
 .stop{border-left:3px solid var(--gold-lo);padding-left:12px;margin:12px 0}
 .stop h4{font-family:var(--disp);font-size:13px;letter-spacing:.06em;color:var(--gold-hi)}
 .stop ul{margin:4px 0 0 0;padding-left:18px;font-size:12.5px}
@@ -141,6 +147,7 @@ footer a{color:var(--gold)}
 </div>
 <div id="mainnav"></div>
 <div id="toast"></div>
+<div id="lightbox"><span class="hintx">click or Esc to close</span></div>
 <div id="view"><div class="loadwrap"><div class="lmsg">Stoking the forge</div><div class="loadbar"></div></div></div>
 <footer>
  <span>Völundr <span id="ver"></span></span>
@@ -161,6 +168,13 @@ const wayBtn=(zone,x,y,label)=>(zone&&x!=null&&y!=null)?`<button class="way" dat
 let toastT=null;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1800)}
 async function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(t);return true}}catch{}
   const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();let ok=false;try{ok=document.execCommand('copy')}catch{}document.body.removeChild(ta);return ok}
+// full-screen map: clone the clicked panel (image + overlay) into the lightbox
+const LB=$('#lightbox');
+function openMap(w){const c=w.cloneNode(true);c.classList.remove('sm');const s=c.querySelector('svg');if(s)s.querySelectorAll('text').forEach(t=>t.setAttribute('font-size','1.6'));LB.innerHTML='<span class="hintx">click or Esc to close</span>';LB.appendChild(c);LB.classList.add('on')}
+function closeMap(){LB.classList.remove('on');LB.innerHTML='<span class="hintx">click or Esc to close</span>'}
+LB.addEventListener('click',closeMap);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&LB.classList.contains('on'))closeMap()});
+document.addEventListener('click',e=>{const w=e.target.closest('.mapwrap');if(!w||w.closest('#lightbox'))return;e.stopPropagation();openMap(w)},true);
 document.addEventListener('click',async e=>{const b=e.target.closest('button.way');if(!b)return;e.stopPropagation();const ok=await copyText(b.dataset.way);toast((ok?'copied: ':'copy failed: ')+b.dataset.way)});
 // map panel: zone art + spawn highlight (every known spawn point, red) + pins. Coordinates are map percentages.
 function mapPanel(map,layers,cls){if(!map)return '';
