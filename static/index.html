@@ -110,6 +110,10 @@ footer a{color:var(--gold)}
 .rg{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 4px}
 .rg .r{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px dashed var(--line-hi);border-radius:7px;padding:2px 8px}
 .x{color:var(--faint);cursor:pointer;font-size:11px;margin-left:8px}.x:hover{color:var(--red)}
+.way{font:inherit;font-size:11px;line-height:1;color:var(--gold);background:rgba(201,162,39,.08);border:1px solid var(--gold-lo);border-radius:6px;padding:1px 6px;margin:0 4px 0 2px;cursor:pointer;vertical-align:middle;font-family:var(--mono)}
+.way:hover{background:rgba(201,162,39,.2);color:var(--gold-hi)}
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#151b25;border:1px solid var(--gold-lo);color:var(--gold-hi);font-family:var(--mono);font-size:12px;padding:8px 14px;border-radius:9px;z-index:50;opacity:0;transition:.2s;pointer-events:none;max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast.on{opacity:1}
 .stop{border-left:3px solid var(--gold-lo);padding-left:12px;margin:12px 0}
 .stop h4{font-family:var(--disp);font-size:13px;letter-spacing:.06em;color:var(--gold-hi)}
 .stop ul{margin:4px 0 0 0;padding-left:18px;font-size:12.5px}
@@ -131,6 +135,7 @@ footer a{color:var(--gold)}
  <div class="meta" id="meta">WoW Forever · recipes you hold, recipes you lack<br>and the road to each</div>
 </div>
 <div id="mainnav"></div>
+<div id="toast"></div>
 <div id="view"><div class="loadwrap"><div class="lmsg">Stoking the forge</div><div class="loadbar"></div></div></div>
 <footer>
  <span>Völundr <span id="ver"></span></span>
@@ -146,6 +151,12 @@ const post=(p,b)=>api(p,{method:'POST',headers:{'Content-Type':'application/json
 const title=s=>s?s.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'';
 const ago=t=>{if(!t)return 'never';const d=(Date.now()/1000-t);return d<90?'just now':d<5400?Math.round(d/60)+' min ago':d<172800?Math.round(d/3600)+' h ago':Math.round(d/86400)+' d ago'};
 const money=c=>{if(c==null)return '';c=Math.round(c);const g=Math.floor(c/1e4),s=Math.floor(c%1e4/100),cp=c%100;let o='';if(g)o+=`<span class="g">${g}g</span> `;if(g||s)o+=`<span class="s">${s}s</span> `;o+=`<span class="c">${cp}c</span>`;return `<span class="money">${o}</span>`};
+const wayCmd=(zone,x,y,label)=>`/way ${zone} ${Number(x).toFixed(1)} ${Number(y).toFixed(1)} ${label||''}`.trim();
+const wayBtn=(zone,x,y,label)=>(zone&&x!=null&&y!=null)?`<button class="way" data-way="${esc(wayCmd(zone,x,y,label))}" title="copy TomTom waypoint">⌖ way</button>`:'';
+let toastT=null;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1800)}
+async function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(t);return true}}catch{}
+  const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();let ok=false;try{ok=document.execCommand('copy')}catch{}document.body.removeChild(ta);return ok}
+document.addEventListener('click',async e=>{const b=e.target.closest('button.way');if(!b)return;e.stopPropagation();const ok=await copyText(b.dataset.way);toast((ok?'copied: ':'copy failed: ')+b.dataset.way)});
 const loading=m=>V.innerHTML=`<div class="loadwrap"><div class="lmsg">${esc(m||'Reading the ledger')}</div><div class="loadbar"></div></div>`;
 const fail=e=>V.innerHTML=`<div class="card err"><b>Something broke</b><div class="hint" style="margin-top:6px">${esc(e.message||e)}</div></div>`;
 let HEALTH=null;
@@ -177,7 +188,7 @@ async function syncStatic(){try{const r=await post('/sync/static');alert(r.start
 async function syncChar(slug){loading('Asking the Armory');try{await post('/sync/char/'+slug);await health();charView(slug)}catch(e){fail(e)}}
 
 async function charView(slug){loading('Opening the book');
-  try{const c=await api('/char/'+slug);nav([['Characters','#/'],[c.display||slug,'#/c/'+slug,1],['Next session','#/c/'+slug+'/next']]);
+  try{const c=await api('/char/'+slug);nav([['Characters','#/'],[c.display||slug,'#/c/'+slug,1],['Next session','#/c/'+slug+'/next'],['By zone','#/c/'+slug+'/zones']]);
     const missing=p=>p.universe?Math.max(0,p.universe-p.known):null;
     V.innerHTML=`<div class="saga"><div class="avatar" style="${c.avatar?`background-image:url('${esc(c.avatar)}')`:''}"></div>
       <div><div class="eyebrow">${esc(c.ruleset||'Forever')}${c.faction?' · '+esc(title(c.faction)):''}</div><div class="pname">${esc(c.display||slug)}</div>
@@ -195,7 +206,7 @@ let LED=null, LGROUP='now', LQ='';
 async function ledgerView(slug,ps,group){loading('Turning the pages');
   try{LED=await api(`/char/${slug}/prof/${ps}`);LQ='';
     LGROUP=group||(GROUPS.map(g=>g[0]).find(g=>LED.counts[g]>0)||'all');
-    const c=LED.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],[title(ps),'#/c/'+slug+'/p/'+ps,1],['Next session','#/c/'+slug+'/next']]);
+    const c=LED.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],[title(ps),'#/c/'+slug+'/p/'+ps,1],['Next session','#/c/'+slug+'/next'],['By zone','#/c/'+slug+'/zones']]);
     V.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
       <h3 class="sec" style="margin-top:0">${esc(title(ps))} <span class="hint">${esc(c.display)} · skill <b class="sk">${LED.skill??'?'} / ${LED.max_skill??'?'}</b></span></h3>
       <span class="hint">${LED.total} recipes in game · ${LED.known} known · ForeverDB matched ${LED.fdb_matched}/${LED.total}${LED.fdb_fetched?' (sources '+ago(LED.fdb_fetched)+')':' (no ForeverDB data yet)'}</span></div>
@@ -205,13 +216,13 @@ async function ledgerView(slug,ps,group){loading('Turning the pages');
     renderGroups();renderRows()}catch(e){fail(e)}}
 function renderGroups(){$('#groups').innerHTML=GROUPS.map(([g,l,t])=>`<div class="stat ${LGROUP===g?'on':''}" title="${esc(t)}" onclick="LGROUP='${g}';renderGroups();renderRows()"><b>${LED.counts[g]||0}</b><span>${esc(l)}</span></div>`).join('')+`<div class="stat ${LGROUP==='all'?'on':''}" onclick="LGROUP='all';renderGroups();renderRows()"><b>${LED.total}</b><span>All</span></div>`}
 function srcChip(s){const z=s.zone?` · ${esc(s.zone)}${s.x!=null?` (${s.x}, ${s.y})`:''}`:'';
-  const lv=s.levels?` lvl ${s.levels[0]}–${s.levels[1]}`:'';
+  const lv=s.levels?` lvl ${s.levels[0]}–${s.levels[1]}`:'';const sp=s.spawns?` · ${s.spawns} spawn${s.spawns>1?'s':''}`:'';
   const extra=[s.type==='vendor'&&s.price!=null?money(s.price):'',s.type==='trainer'&&s.price?money(s.price):'',s.limited?'limited'+(s.stock?' ×'+s.stock:''):'',s.not_on_list?'not on list players saw':'',
     s.drop_chance!=null?esc(String(s.drop_chance))+'%':'',s.rep?'rep: '+esc(s.rep):'',s.extra_cost&&s.extra_cost.length?esc(s.extra_cost.map(c=>(c.amount||c.count||'')+' '+(c.name||c.item||'')).join(', ')):'',
     s.seen===false?'Classic data, unconfirmed':''].filter(Boolean).join(' · ');
   const label=s.type==='drop'?(s.kind==='object'?'Object':s.kind==='world drop'?'World drop':'Drop'):title(s.type);
   const tip=s.title?`${s.title}`:s.type;
-  return `<span class="chip c-${esc(s.type)}" title="${esc(tip)}">${esc(label)}: ${esc(s.name||'?')}${lv}${z}${extra?' · '+extra:''}</span>`}
+  return `<span class="chip c-${esc(s.type)}" title="${esc(tip)}">${esc(label)}: ${esc(s.name||'?')}${lv}${z}${sp}${extra?' · '+extra:''}</span>${wayBtn(s.zone,s.x,s.y,s.name)}`}
 function sk(r){if(r.orange==null&&r.req==null)return '<span class="x">?</span>';return `<span class="sk"><span class="o">${r.orange??r.req??'?'}</span>${r.yellow?` <span class="y">${r.yellow}</span>`:''}${r.green?` <span class="g">${r.green}</span>`:''}${r.grey?` <span class="x">${r.grey}</span>`:''}</span>`}
 function renderRows(){const q=LQ.toLowerCase();const rows=LED.recipes.filter(r=>(LGROUP==='all'||r.group===LGROUP)&&(!q||(r.name+' '+(r.item_name||'')+' '+(r.category||'')).toLowerCase().includes(q)));
   $('#rowcount').textContent=rows.length+' shown';
@@ -224,21 +235,34 @@ function renderRows(){const q=LQ.toLowerCase();const rows=LED.recipes.filter(r=>
 function toggle(id){const d=document.getElementById('d'+id);d.style.display=d.style.display==='none'?'':'none'}
 
 async function nextView(slug){loading('Plotting the route');
-  try{const n=await api('/char/'+slug+'/next');const c=n.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],['Next session','#/c/'+slug+'/next',1]]);
+  try{const n=await api('/char/'+slug+'/next');const c=n.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],['Next session','#/c/'+slug+'/next',1],['By zone','#/c/'+slug+'/zones']]);
     V.innerHTML=`<div class="card"><h3 class="sec" style="margin-top:0">Next session <span class="hint">everything learnable right now, grouped by who sells or teaches it</span></h3>
       <div class="statrowx"><div class="stat"><b>${n.stops.length}</b><span>stops</span></div><div class="stat"><b>${n.stops.reduce((a,s)=>a+s.items.length,0)}</b><span>recipes</span></div><div class="stat"><b style="font-size:18px">${n.total_cost?money(n.total_cost):'—'}</b><span>gold</span></div>${Object.entries(n.currency||{}).map(([k,v])=>`<div class="stat"><b style="font-size:18px">${v.toLocaleString()}</b><span>${esc(k)}</span></div>`).join('')}</div>
-      ${n.stops.length?n.stops.map(s=>`<div class="stop"><h4>${esc(title(s.type))} · ${esc(s.name||'?')}${s.title?` <span class="hint" style="font-family:Inter;font-weight:400">${esc(s.title)}</span>`:''} <span class="hint">${esc(s.zone||'')}${s.x!=null?` (${s.x}, ${s.y})`:''}${s.seen?'':' · Classic data, unconfirmed'}${s.limited?' · limited stock':''}${s.cost?' · '+money(s.cost):''}${Object.entries(s.currency||{}).map(([k,v])=>' · '+v.toLocaleString()+' '+esc(k)).join('')}</span></h4>
+      ${n.stops.length?n.stops.map(s=>`<div class="stop"><h4>${wayBtn(s.zone,s.x,s.y,s.name)} ${esc(title(s.type))} · ${esc(s.name||'?')}${s.title?` <span class="hint" style="font-family:Inter;font-weight:400">${esc(s.title)}</span>`:''} <span class="hint">${esc(s.zone||'')}${s.x!=null?` (${s.x}, ${s.y})`:''}${s.seen?'':' · Classic data, unconfirmed'}${s.limited?' · limited stock':''}${s.cost?' · '+money(s.cost):''}${Object.entries(s.currency||{}).map(([k,v])=>' · '+v.toLocaleString()+' '+esc(k)).join('')}</span></h4>
         <ul>${s.items.map(i=>`<li>${esc(i.recipe)} <span>(${esc(title(i.prof))}${i.skill?', skill '+i.skill:''}${i.price?', '+money(i.price):''}${(i.costs||[]).map(c=>', '+(c.amount||'')+' '+esc(c.name||'')).join('')}${i.limited?', limited':''}${i.alternatives?', +'+i.alternatives+' other NPC'+(i.alternatives>1?'s':''):''})</span></li>`).join('')}</ul></div>`).join(''):
         `<div class="empty">${n.professions.length?'Nothing learnable at your current skill — raise it, or check Farm it':'No professions synced'}</div>`}</div>
       <div class="card"><h3 class="sec" style="margin-top:0">Farm it <span class="hint">drops and quests, best odds first</span></h3>
       ${n.farm.length?`<table><thead><tr><th>Recipe</th><th>Profession</th><th>Source</th><th class="r">Chance</th></tr></thead><tbody>${n.farm.map(f=>`<tr><td><b>${esc(f.recipe)}</b>${f.req?`<div class="hint">needs ${f.req}</div>`:''}</td><td class="hint">${esc(title(f.prof))}</td><td>${srcChip(f)}</td><td class="r">${f.chance!=null?esc(String(f.chance))+(/%/.test(String(f.chance))?'':'%'):''}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No farmable recipes listed</div>'}</div>`}catch(e){fail(e)}}
 
+async function zonesView(slug){loading('Unrolling the map');
+  try{const n=await api('/char/'+slug+'/next');const c=n.char;nav([['Characters','#/'],[c.display||slug,'#/c/'+slug],['Next session','#/c/'+slug+'/next'],['By zone','#/c/'+slug+'/zones',1]]);
+    const zs=(n.zones||[]);
+    V.innerHTML=`<div class="card"><h3 class="sec" style="margin-top:0">By zone <span class="hint">every trainer, vendor and farm target with a waypoint, grouped by where you'd stand</span></h3>
+      <div class="hint" style="margin-top:4px">⌖ copies a TomTom <code>/way</code> line. "All" copies one line per waypoint for the zone — paste them one at a time.</div></div>`+
+      (zs.length?zs.map(z=>{const ways=[...z.stops.map(s=>s.x!=null?wayCmd(z.zone,s.x,s.y,s.name):null),...z.farm.map(f=>f.x!=null?wayCmd(z.zone,f.x,f.y,f.name):null)].filter(Boolean);
+        return `<div class="card"><h3 class="sec" style="margin-top:0">${esc(z.zone)} <span class="hint">${z.stops.length} stop${z.stops.length!==1?'s':''} · ${z.farm.length} farm target${z.farm.length!==1?'s':''}</span>${ways.length?`<button class="way" data-way="${esc(ways.join('
+'))}" style="margin-left:auto">⌖ all (${ways.length})</button>`:''}</h3>
+        ${z.stops.map(s=>`<div class="stop"><h4>${wayBtn(z.zone,s.x,s.y,s.name)} ${esc(title(s.type))} · ${esc(s.name)}${s.title?` <span class="hint" style="font-family:Inter;font-weight:400">${esc(s.title)}</span>`:''} <span class="hint">${s.x!=null?`(${s.x}, ${s.y})`:''}${s.seen?'':' · Classic data, unconfirmed'}${s.cost?' · '+money(s.cost):''}${Object.entries(s.currency||{}).map(([k,v])=>' · '+v.toLocaleString()+' '+esc(k)).join('')}</span></h4>
+          <ul>${s.items.map(i=>`<li>${esc(i.recipe)} <span>(${esc(title(i.prof))}${i.skill?', skill '+i.skill:''}${i.price?', '+money(i.price):''}${(i.costs||[]).map(c=>', '+(c.amount||'')+' '+esc(c.name||'')).join('')})</span></li>`).join('')}</ul></div>`).join('')}
+        ${z.farm.map(f=>`<div class="stop" style="border-left-color:rgba(248,81,73,.5)"><h4>${wayBtn(z.zone,f.x,f.y,f.name)} ${esc(f.kind==='object'?'Object':f.kind==='world drop'?'World drop':title(f.type))} · ${esc(f.name)} <span class="hint">${f.levels?`lvl ${f.levels[0]}–${f.levels[1]} · `:''}${f.x!=null?`(${f.x}, ${f.y})`:''}${f.spawns?` · ${f.spawns} spawns`:''}${(f.zones||[]).length>1?' · also '+esc(f.zones.filter(zz=>zz.zone!==z.zone).map(zz=>zz.zone).join(', ')):''}</span></h4>
+          <ul>${f.recipes.map(r=>`<li>${esc(r.recipe)} <span>(${esc(title(r.prof))}${r.chance!=null?', '+esc(String(r.chance))+'%':''}${r.req?', needs '+r.req:''})</span></li>`).join('')}</ul></div>`).join('')}</div>`}).join(''):'<div class="empty">Nothing with a location yet</div>')}catch(e){fail(e)}}
+
 async function probeView(){nav([['Characters','#/'],['Probe','#/probe',1]]);loading('Knocking on Blizzard\'s door');
   try{const p=await api('/probe');V.innerHTML=`<div class="card"><h3 class="sec" style="margin-top:0">Endpoint probe <span class="hint">the Forever API is community-documented; this is what answers today</span></h3><pre style="font-family:var(--mono);font-size:12px;white-space:pre-wrap;margin-top:10px">${esc(JSON.stringify(p,null,2))}</pre></div>`}catch(e){fail(e)}}
 
-async function route(){const h=location.hash||'#/';await health();const m=h.match(/^#\/c\/([^/]+)(?:\/(p)\/([^/]+)|\/(next))?/);
+async function route(){const h=location.hash||'#/';await health();const m=h.match(/^#\/c\/([^/]+)(?:\/(p)\/([^/]+)|\/(next)|\/(zones))?/);
   if(h==='#/probe')return probeView();
-  if(m){if(m[2])return ledgerView(m[1],m[3]);if(m[4])return nextView(m[1]);return charView(m[1])}
+  if(m){if(m[2])return ledgerView(m[1],m[3]);if(m[4])return nextView(m[1]);if(m[5])return zonesView(m[1]);return charView(m[1])}
   return home()}
 window.addEventListener('hashchange',route);route();
 setInterval(()=>{if(HEALTH&&HEALTH.sync&&HEALTH.sync.running)health()},5000);

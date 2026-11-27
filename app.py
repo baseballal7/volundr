@@ -14,10 +14,12 @@ from pydantic import BaseModel
 
 import blizzard as bz
 import foreverdb as fdb
+import questie
 
 DB = os.environ.get("VOLUNDR_DB", "/data/volundr.db")
 SYNC_HOURS = float(os.environ.get("VOLUNDR_SYNC_HOURS", "6"))
 FDB_TTL_DAYS = float(os.environ.get("VOLUNDR_FDB_TTL_DAYS", "7"))
+QUESTIE_TTL_DAYS = float(os.environ.get("VOLUNDR_QUESTIE_TTL_DAYS", "7"))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 VERSION = "0.1.0"
 
@@ -39,6 +41,9 @@ CREATE TABLE IF NOT EXISTS bnet_recipes(
 CREATE TABLE IF NOT EXISTS fdb_recipes(
   key TEXT PRIMARY KEY, prof_slug TEXT, name TEXT, nname TEXT, item_id INT, spell_id INT,
   orange INT, yellow INT, green INT, grey INT, category TEXT, sources TEXT, norm TEXT, raw TEXT, fetched REAL);
+CREATE TABLE IF NOT EXISTS npc_locations(
+  npc_id INT PRIMARY KEY, name TEXT, sub TEXT, min_lvl INT, max_lvl INT, area INT, zone TEXT, x REAL, y REAL,
+  spawns INT, cluster INT, zones TEXT);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 CREATE INDEX IF NOT EXISTS ix_bnet_prof ON bnet_recipes(prof_slug);
 CREATE INDEX IF NOT EXISTS ix_fdb_prof ON fdb_recipes(prof_slug);
@@ -233,6 +238,26 @@ def sync_fdb_profession(slug: str) -> dict:
     return {"profession": slug, "recipes": len(rows), "pages": res["pages"]}
 
 
+def sync_questie() -> dict:
+    """QuestieDB Forever NPC spawns -> npc_locations (drop sources get a zone and a /way)."""
+    SYNC["detail"] = "QuestieDB: downloading NPC spawns"
+    ddir = os.path.join(os.path.dirname(DB) or ".", "questie")
+    os.makedirs(ddir, exist_ok=True)
+    npc_lua = questie.fetch(questie.NPC_URL)
+    zone_lua = questie.fetch(questie.ZONE_URL)
+    with open(os.path.join(ddir, "foreverNpcDB.lua"), "w", encoding="utf-8") as fh:
+        fh.write(npc_lua)
+    with open(os.path.join(ddir, "areaIdToUiMapId.lua"), "w", encoding="utf-8") as fh:
+        fh.write(zone_lua)
+    SYNC["detail"] = "QuestieDB: parsing"
+    rows = questie.build_locations(questie.parse_npcs(npc_lua), questie.parse_zone_names(zone_lua))
+    with db() as con:
+        con.execute("DELETE FROM npc_locations")
+        con.executemany("INSERT OR REPLACE INTO npc_locations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    meta_set("questie_fetched", time.time())
+    return {"npcs": len(rows)}
+
+
 def run_static_sync(prof_slugs: list[str] | None, force_fdb=False):
     if SYNC["running"]:
         return
@@ -259,6 +284,13 @@ def run_static_sync(prof_slugs: list[str] | None, force_fdb=False):
                     sync_fdb_profession(p["slug"])
                 except Exception as e:  # noqa: BLE001
                     SYNC["errors"].append(f"foreverdb {p['slug']}: {e}")
+        last_q = float(meta_get("questie_fetched", 0) or 0)
+        if force_fdb or time.time() - last_q > QUESTIE_TTL_DAYS * 86400:
+            SYNC["phase"] = "questie"
+            try:
+                sync_questie()
+            except Exception as e:  # noqa: BLE001
+                SYNC["errors"].append(f"questie: {e}")
         SYNC["phase"] = "done"
     finally:
         SYNC.update(running=False, done=time.time())
@@ -274,7 +306,7 @@ def scheduler():
                 slugs = [r["slug"] for r in con.execute("SELECT slug FROM chars")]
             for s in slugs:
                 sync_char(s)
-            if time.time() - last_static > 86400 and (bz.configured() or fdb.configured()):
+            if time.time() - last_static > 86400:
                 run_static_sync(None)
                 last_static = time.time()
         except Exception:  # noqa: BLE001
@@ -313,6 +345,33 @@ def classify(rec: dict, skill, max_skill, faction: str) -> dict:
     other_faction = bool(rec.get("sources")) and not srcs
     return {"group": g, "req": req, "needs_rank": needs_rank, "sources": srcs, "learn": learn, "farm": farm,
             "other_faction": other_faction}
+
+
+def npc_lookup(ids: set) -> dict:
+    if not ids:
+        return {}
+    with db() as con:
+        q = ",".join("?" * len(ids))
+        return {r["npc_id"]: dict(r) for r in con.execute(f"SELECT * FROM npc_locations WHERE npc_id IN ({q})", list(ids))}
+
+
+def enrich_sources(rows: list):
+    """Give drop sources (and anything else lacking coordinates) a zone and x/y from QuestieDB."""
+    ids = {s.get("npc_id") for r in rows for s in r.get("sources", []) if s.get("npc_id") and (s.get("x") is None or not s.get("zone"))}
+    loc = npc_lookup(ids)
+    for r in rows:
+        for s in r.get("sources", []):
+            L = loc.get(s.get("npc_id"))
+            if not L:
+                continue
+            if not s.get("zone"):
+                s["zone"] = L["zone"]
+            if s.get("x") is None and L["x"] is not None:
+                s["x"], s["y"] = L["x"], L["y"]
+            s["spawns"] = L["spawns"] or None
+            s["zones"] = json.loads(L["zones"] or "[]")
+            if L.get("min_lvl") and not s.get("levels"):
+                s["levels"] = [L["min_lvl"], L["max_lvl"]]
 
 
 def ledger(slug: str, pslug: str) -> dict:
@@ -360,6 +419,7 @@ def ledger(slug: str, pslug: str) -> dict:
         row.update(group="known" if row["known"] else c["group"], req=c["req"], needs_rank=c["needs_rank"], sources=c["sources"],
                    other_faction=c["other_faction"])
         out.append(row)
+    enrich_sources(out)
     order = {"now": 0, "later": 1, "farm": 2, "unknown": 3, "known": 4}
     out.sort(key=lambda r: (order[r["group"]], r["req"] or 0, r["name"]))
     counts = {g: sum(1 for r in out if r["group"] == g) for g in order}
@@ -394,8 +454,10 @@ def next_session(slug: str) -> dict:
                         offers.setdefault(rk, []).append((k, s, r, ps))
             elif r["group"] == "farm":
                 for s in r["sources"]:
-                    farm.append({"recipe": r["name"], "prof": ps, "type": s["type"], "name": s["name"], "zone": s["zone"],
-                                 "chance": s.get("drop_chance"), "req": r["req"]})
+                    farm.append({"recipe": r["name"], "prof": ps, "type": s["type"], "kind": s.get("kind"), "name": s["name"],
+                                 "zone": s.get("zone") or "", "x": s.get("x"), "y": s.get("y"), "spawns": s.get("spawns"),
+                                 "levels": s.get("levels"), "zones": s.get("zones"), "drop_chance": s.get("drop_chance"),
+                                 "chance": s.get("drop_chance"), "req": r["req"], "npc_id": s.get("npc_id"), "quest_id": s.get("quest_id")})
     def chance(x):
         try:
             return float(str(x.get("chance") or "0").rstrip("%"))
@@ -435,12 +497,30 @@ def next_session(slug: str) -> dict:
             uncovered.discard(rk)
         st["items"].sort(key=lambda i: (i["prof"], i["skill"] or 0, i["recipe"]))
         stops.append(st)
+    # by zone: every stop and every farm target with a known zone, for the route-by-area view
+    zones = {}
+    for st in stops:
+        z = zones.setdefault(st["zone"] or "Unknown zone", {"zone": st["zone"] or "Unknown zone", "stops": [], "farm": []})
+        z["stops"].append(st)
+    seen_farm = set()
+    for f_ in farm:
+        key = (f_["name"], f_["zone"])
+        if key in seen_farm:
+            for z in zones.values():
+                for t in z["farm"]:
+                    if (t["name"], t["zone"]) == key:
+                        t["recipes"].append({"recipe": f_["recipe"], "prof": f_["prof"], "chance": f_["chance"], "req": f_["req"]})
+            continue
+        seen_farm.add(key)
+        z = zones.setdefault(f_["zone"] or "Unknown zone", {"zone": f_["zone"] or "Unknown zone", "stops": [], "farm": []})
+        z["farm"].append(dict(f_, recipes=[{"recipe": f_["recipe"], "prof": f_["prof"], "chance": f_["chance"], "req": f_["req"]}]))
+    zone_list = sorted(zones.values(), key=lambda z: (z["zone"] == "Unknown zone", -(len(z["stops"]) + len(z["farm"])), z["zone"]))
     currency = {}
     for st in stops:
         for k, v in (st.get("currency") or {}).items():
             currency[k] = currency.get(k, 0) + v
     return {"char": dict(ch, raw=None), "stops": stops, "farm": farm[:60],
-            "total_cost": sum(s["cost"] for s in stops), "currency": currency,
+            "total_cost": sum(s["cost"] for s in stops), "currency": currency, "zones": zone_list,
             "recipes": sum(len(s["items"]) for s in stops), "professions": pslugs}
 
 
@@ -467,7 +547,7 @@ def index():
 @app.get("/api/health")
 def health():
     with db() as con:
-        n = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("chars", "char_recipes", "bnet_recipes", "fdb_recipes")}
+        n = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("chars", "char_recipes", "bnet_recipes", "fdb_recipes", "npc_locations")}
     return {"ok": True, "version": VERSION, "blizzard": bz.configured(), "foreverdb": fdb.configured(),
             "static_ns": _ns(), "region": bz.REGION, "counts": n, "sync": SYNC}
 
@@ -516,6 +596,22 @@ def api_sync_static(prof: str | None = None, force: bool = False):
     if SYNC["running"]:
         return {"ok": False, "running": True, "sync": SYNC}
     threading.Thread(target=run_static_sync, args=([prof] if prof else None, force), daemon=True).start()
+    return {"ok": True, "started": True}
+
+
+@app.post("/api/sync/questie")
+def api_sync_questie():
+    if SYNC["running"]:
+        return {"ok": False, "running": True}
+    def run():
+        SYNC.update(running=True, phase="questie", detail="", started=time.time(), errors=[])
+        try:
+            sync_questie()
+        except Exception as e:  # noqa: BLE001
+            SYNC["errors"].append(f"questie: {e}")
+        finally:
+            SYNC.update(running=False, phase="done", done=time.time())
+    threading.Thread(target=run, daemon=True).start()
     return {"ok": True, "started": True}
 
 
