@@ -222,7 +222,7 @@ def sync_fdb_profession(slug: str) -> dict:
         n = fdb.normalize_recipe(r)
         key = f"{slug}:{n['fdb_id'] or fdb.norm_name(n['name'])}"
         rows.append((key, slug, n["name"], fdb.norm_name(n["name"]), n["item_id"], n["spell_id"], n["orange"], n["yellow"], n["green"],
-                     n["grey"], n["category"], json.dumps(n["sources"]), json.dumps(n), json.dumps(r)[:6000], time.time()))
+                     n["grey"], n["category"], json.dumps(n["sources"]), json.dumps(n), json.dumps(r), time.time()))
     with db() as con:
         con.execute("DELETE FROM fdb_recipes WHERE prof_slug=?", (slug,))
         con.executemany("INSERT OR REPLACE INTO fdb_recipes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
@@ -283,7 +283,7 @@ def scheduler():
 
 
 # ---- ledger -----------------------------------------------------------------
-LEARN = ("trainer", "vendor")
+LEARN = ("trainer", "vendor", "auto")
 FARM = ("drop", "quest", "fishing", "object")
 
 
@@ -298,7 +298,9 @@ def classify(rec: dict, skill, max_skill, faction: str) -> dict:
     farm = [s for s in srcs if s["type"] in FARM]
     reqs = [s["skill"] for s in learn if s.get("skill")]
     req = rec.get("orange") or (min(reqs) if reqs else None)
-    if learn:
+    if rec.get("speculation"):
+        g = "unknown"          # ForeverDB: needs an item not in the Forever client — may not be craftable
+    elif learn:
         if req is None or (skill is not None and req <= skill):
             g = "now"
         else:
@@ -343,11 +345,15 @@ def ledger(slug: str, pslug: str) -> dict:
             matched += 1
         row = {
             "recipe_id": u["recipe_id"], "name": u["name"], "item_id": u.get("item_id"), "item_name": u.get("item_name"),
-            "category": u.get("category") or norm.get("category") or "", "tier": u.get("tier_name") or "",
+            "category": norm.get("category") or u.get("category") or "", "tier": u.get("tier_name") or "",
+            "bnet_category": u.get("category") or "",
             "known": u["recipe_id"] in known,
             "orange": norm.get("orange"), "yellow": norm.get("yellow"), "green": norm.get("green"), "grey": norm.get("grey"),
             "reagents": json.loads(u["reagents"]) if u.get("reagents") else (norm.get("reagents") or []),
-            "changed": norm.get("changed", False), "new": norm.get("new", False),
+            "changed": norm.get("changed", False), "changed_fields": norm.get("changed_fields", []), "new": norm.get("new", False),
+            "required_level": norm.get("required_level"), "recipe_item": norm.get("recipe_item_name") or "",
+            "ways": norm.get("ways", []), "classic_vendors": norm.get("classic_vendors", 0), "url": norm.get("url"),
+            "speculation": bool(norm.get("speculation")), "speculation_reasons": norm.get("speculation_reasons", []),
             "sources": norm.get("sources", []), "fdb": bool(f),
         }
         c = classify(row, skill, max_skill, faction)
@@ -372,18 +378,20 @@ def next_session(slug: str) -> dict:
         if not ch:
             raise HTTPException(404, "unknown character")
         pslugs = [r["prof_slug"] for r in con.execute("SELECT DISTINCT prof_slug FROM char_profs WHERE slug=?", (slug,))]
-    stops, farm = {}, []
+    farm = []
+    # candidate stops: every trainer/vendor that offers a learnable recipe; one recipe may have many
+    cand, offers = {}, {}   # stop key -> stop ; recipe key -> [(stop key, source)]
     for ps in pslugs:
         L = ledger(slug, ps)
         for r in L["recipes"]:
             if r["group"] == "now":
+                rk = (ps, r["recipe_id"])
                 for s in r["sources"]:
-                    if s["type"] in LEARN:
+                    if s["type"] in ("trainer", "vendor"):
                         k = f"{s['type']}|{s['name']}|{s['zone']}"
-                        st = stops.setdefault(k, {"type": s["type"], "name": s["name"], "zone": s["zone"], "items": [], "cost": 0, "limited": False})
-                        st["items"].append({"recipe": r["name"], "prof": ps, "price": s.get("price"), "limited": s.get("limited"), "skill": s.get("skill") or r["req"]})
-                        st["cost"] += s.get("price") or 0
-                        st["limited"] = st["limited"] or bool(s.get("limited"))
+                        st = cand.setdefault(k, {"type": s["type"], "name": s["name"], "title": s.get("title") or "", "zone": s["zone"],
+                                                 "x": s.get("x"), "y": s.get("y"), "seen": bool(s.get("seen")), "items": [], "cost": 0, "limited": False})
+                        offers.setdefault(rk, []).append((k, s, r, ps))
             elif r["group"] == "farm":
                 for s in r["sources"]:
                     farm.append({"recipe": r["name"], "prof": ps, "type": s["type"], "name": s["name"], "zone": s["zone"],
@@ -394,9 +402,46 @@ def next_session(slug: str) -> dict:
         except ValueError:
             return 0.0
     farm.sort(key=lambda x: (-chance(x), x["recipe"]))
-    stop_list = sorted(stops.values(), key=lambda s: (s["type"] != "trainer", s["zone"] or "", s["name"] or ""))
-    return {"char": dict(ch, raw=None), "stops": stop_list, "farm": farm[:60],
-            "total_cost": sum(s["cost"] for s in stop_list), "professions": pslugs}
+    # greedy set cover: fewest stops that teach everything; prefer NPCs seen in Forever, then capitals
+    CAPITALS = ("Stormwind City", "Ironforge", "Darnassus", "Orgrimmar", "Undercity", "Thunder Bluff")
+    uncovered = set(offers)
+    stops = []
+    while uncovered:
+        best, best_score = None, None
+        for k, st in cand.items():
+            cov = [rk for rk in uncovered if any(o[0] == k for o in offers[rk])]
+            if not cov:
+                continue
+            score = (len(cov), st["seen"], st["zone"] in CAPITALS, st["type"] == "trainer", -sum((o[1].get("price") or 0) for rk in cov for o in offers[rk] if o[0] == k))
+            if best_score is None or score > best_score:
+                best, best_score = k, score
+        if best is None:
+            break
+        st = dict(cand[best], items=[], cost=0, limited=False)
+        for rk in sorted(uncovered, key=lambda x: x[1]):
+            os_ = [o for o in offers[rk] if o[0] == best]
+            if not os_:
+                continue
+            _, s, r, ps = os_[0]
+            costs = [c for c in (s.get("extra_cost") or []) if isinstance(c, dict)]
+            st["items"].append({"recipe": r["name"], "prof": ps, "price": s.get("price"), "limited": s.get("limited"),
+                                "skill": s.get("skill") or r["req"], "alternatives": len(offers[rk]) - 1,
+                                "costs": [{"name": c.get("name"), "amount": c.get("amount") or c.get("count")} for c in costs]})
+            st["cost"] += s.get("price") or 0
+            for c in costs:
+                cur = st.setdefault("currency", {})
+                cur[c.get("name") or "?"] = cur.get(c.get("name") or "?", 0) + (c.get("amount") or c.get("count") or 0)
+            st["limited"] = st["limited"] or bool(s.get("limited"))
+            uncovered.discard(rk)
+        st["items"].sort(key=lambda i: (i["prof"], i["skill"] or 0, i["recipe"]))
+        stops.append(st)
+    currency = {}
+    for st in stops:
+        for k, v in (st.get("currency") or {}).items():
+            currency[k] = currency.get(k, 0) + v
+    return {"char": dict(ch, raw=None), "stops": stops, "farm": farm[:60],
+            "total_cost": sum(s["cost"] for s in stops), "currency": currency,
+            "recipes": sum(len(s["items"]) for s in stops), "professions": pslugs}
 
 
 # ---- API ----------------------------------------------------------------------

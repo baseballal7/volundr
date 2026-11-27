@@ -107,67 +107,93 @@ def norm_name(s: str) -> str:
 
 
 def normalize_recipe(r: dict) -> dict:
-    """Flatten one ForeverDB recipe into what the ledger needs; keep the raw object too."""
-    makes = _pick(r, "makes", "creates", "product", "crafts", "result", default={}) or {}
-    if isinstance(makes, list):
-        makes = makes[0] if makes else {}
-    skill = _pick(r, "skill", "skillColours", "skillColors", "colours", "colors", "skillLevels", default={}) or {}
-    if not isinstance(skill, dict):
-        skill = {"orange": skill}
-    learned = _pick(r, "learnedFrom", "learned_from", "sources", default={}) or {}
-    srcs = learned.get("sources") if isinstance(learned, dict) else learned
-    if not isinstance(srcs, list):
-        srcs = []
-    out = {
-        "fdb_id": _pick(r, "id", "recipeId", "spellId"),
-        "spell_id": _int(_pick(r, "spellId", "spell_id")),
-        "name": _pick(r, "name", "recipeName", "spellName", default=""),
-        "item_id": _int(_pick(makes, "itemId", "item_id", "id")),
-        "item_name": _pick(makes, "name", "itemName", default=""),
-        "recipe_item_id": _int(_pick(_pick(r, "recipeItem", "taughtBy", "item", default={}) or {}, "id", "itemId")),
-        "orange": _int(_pick(skill, "orange", "min", "learn", "learnedAt", "minSkill")),
-        "yellow": _int(_pick(skill, "yellow")),
-        "green": _int(_pick(skill, "green")),
-        "grey": _int(_pick(skill, "grey", "gray")),
-        "category": _pick(r, "category", "categoryName", default=""),
-        "changed": bool(_pick(r, "changed", "changedInForever", "foreverChanges", default=False)),
-        "new": bool(_pick(r, "new", "newInForever", default=False)),
-        "reagents": _pick(r, "reagents", "materials", default=[]) or [],
-        "sources": [normalize_source(s) for s in srcs],
-    }
-    return out
-
-
-def normalize_source(s: dict) -> dict:
-    t = str(_pick(s, "type", "kind", "sourceType", default="")).lower()
-    if "train" in t: t = "trainer"
-    elif "vend" in t or "merchant" in t: t = "vendor"
-    elif "quest" in t: t = "quest"
-    elif "drop" in t or "loot" in t or "creature" in t or "npc" in t and "drop" in json.dumps(s).lower(): t = "drop"
-    elif "fish" in t: t = "fishing"
-    elif "object" in t or "chest" in t: t = "object"
-    npc = _pick(s, "npc", "creature", "trainer", "vendor", "giver", default={}) or {}
-    loc = _pick(s, "location", "zone", "area", default=None)
-    if isinstance(loc, dict):
-        loc_name = _pick(loc, "name", "zone", "zoneName", default="")
-    else:
-        loc_name = loc or _pick(npc, "zone", "zoneName", "location", default="") or ""
-    price = _pick(s, "price", "cost", "vendorPrice", "costCopper", default=None)
-    if isinstance(price, dict):
-        price = _pick(price, "copper", "perItem", "each", "total", "perPurchase")
+    """Flatten one ForeverDB recipe (live shape, 2026-11-27) into what the ledger needs."""
+    makes = r.get("makes") or {}
+    skill = r.get("skill") or {}
+    lf = r.get("learnedFrom") or {}
+    src = lf.get("sources") or {}
+    if not isinstance(src, dict):
+        src = {}
+    cat = r.get("category") or {}
+    ritem = src.get("recipeItem") or (lf.get("recipeItems") or [{}])[0] or {}
+    trainer_cost = _int((lf.get("trainer") or {}).get("cost")) or _int(src.get("trainerCost"))
+    sources = []
+    sources += _npc_sources(src.get("trainers"), "trainer", trainer_cost, src)
+    sources += _npc_sources(src.get("vendors"), "vendor", None, src)
+    for d in src.get("drops") or []:
+        kind = str(d.get("kind") or "drop")
+        lv = d.get("creatureLevels")
+        sources.append({
+            "type": "drop", "kind": kind, "name": d.get("from") or ("World drop" if "world" in kind else kind.title()),
+            "zone": "", "faction": "", "skill": None, "price": None, "limited": False, "stock": None,
+            "drop_chance": d.get("chancePercent"), "rep": None, "extra_cost": None, "seen": None,
+            "quest_id": None, "npc_id": _int(d.get("npcId")), "levels": lv if isinstance(lv, list) else None,
+        })
+    for q in src.get("quests") or []:
+        sources.append({
+            "type": "quest", "name": q.get("name") or "", "zone": "", "faction": str(q.get("faction") or "").lower(),
+            "skill": None, "price": None, "limited": False, "stock": None, "drop_chance": None, "rep": None,
+            "extra_cost": None, "seen": q.get("inForeverClient"), "quest_id": _int(q.get("questId")), "npc_id": None,
+        })
+    if lf.get("automatic") or "auto" in (src.get("ways") or []):
+        sources.append({"type": "auto", "name": "learned with the profession rank", "zone": "", "faction": "",
+                        "skill": _int(src.get("learnAtSkill")), "price": None, "limited": False, "stock": None,
+                        "drop_chance": None, "rep": None, "extra_cost": None, "seen": None, "quest_id": None, "npc_id": None})
     return {
-        "type": t or "unknown",
-        "name": _pick(s, "name", "npcName", "questName", "title", default="") or _pick(npc, "name", default=""),
-        "zone": loc_name if isinstance(loc_name, str) else str(loc_name),
-        "faction": (str(_pick(s, "faction", "side", default="") or _pick(npc, "faction", default="") or "")).lower(),
-        "skill": _int(_pick(s, "skill", "requiredSkill", "skillRequired", "minSkill")),
-        "price": _int(price),
-        "limited": bool(_pick(s, "limited", "limitedStock", "isLimited", default=False)),
-        "stock": _int(_pick(s, "stock", "maxStock")),
-        "drop_chance": _pick(s, "dropChance", "chance", "dropRate", "rate"),
-        "rep": _pick(s, "reputation", "repDiscountFaction", "discountFaction", default=None),
-        "extra_cost": _pick(s, "extraCost", "extraCosts", "merchantsFavor", default=None),
-        "seen": _pick(s, "seenInForever", "seen", "verified", default=None),
-        "quest_id": _int(_pick(s, "questId", "quest_id")),
-        "npc_id": _int(_pick(npc, "id", "npcId")),
+        "fdb_id": r.get("spellId") or r.get("id"),
+        "spell_id": _int(r.get("spellId")),
+        "name": r.get("name") or "",
+        "item_id": _int(makes.get("itemId")),
+        "item_name": makes.get("name") or "",
+        "item_count": makes.get("count"),
+        "recipe_item_id": _int(ritem.get("itemId")),
+        "recipe_item_name": ritem.get("name") or "",
+        "orange": _int(skill.get("orange")) or _int(src.get("learnAtSkill")),
+        "yellow": _int(skill.get("yellow")), "green": _int(skill.get("green")), "grey": _int(skill.get("grey")),
+        "learn_at": _int(src.get("learnAtSkill")),
+        "required_level": _int(r.get("requiredLevel")),
+        "category": cat.get("name") if isinstance(cat, dict) else str(cat or ""),
+        "changed": bool(r.get("changedFromClassic")),
+        "changed_fields": r.get("changedFromClassic") or [],
+        "new": bool(r.get("newInForever")),
+        "leftover_of": r.get("leftoverOf"),
+        "speculation": bool(r.get("speculation")),
+        "speculation_reasons": r.get("speculationReasons") or [],
+        "camp_tier": r.get("campTier"),
+        "same_name": len(r.get("sameNameRecipes") or []),
+        "ways": src.get("ways") or [],
+        "classic_vendors": _int(lf.get("classicVendors")) or 0,
+        "reagents": [{"id": x.get("itemId"), "name": x.get("name"), "qty": x.get("count")} for x in (r.get("reagents") or [])],
+        "url": r.get("url"),
+        "sources": sources,
     }
+
+
+def _npc_sources(groups: dict | None, typ: str, cost, src: dict) -> list:
+    """trainers/vendors come as {"alliance": [...], "horde": [...]}; an NPC with faction "Both" is listed
+    under each. Collapse to one record per NPC with faction alliance / horde / both."""
+    out, byid = [], {}
+    for fac in ("alliance", "horde"):
+        for n in (groups or {}).get(fac) or []:
+            key = n.get("npcId") or (n.get("name"), n.get("zone"))
+            if key in byid:
+                byid[key]["faction"] = "both"
+                continue
+            rep = n.get("reputationFaction")
+            rec = {
+                "type": typ, "name": n.get("name") or "", "title": n.get("title") or "",
+                "zone": n.get("zone") or "", "x": n.get("x"), "y": n.get("y"), "map_id": n.get("mapId"),
+                "faction": "both" if str(n.get("faction") or "").lower() == "both" else fac,
+                "skill": _int(src.get("learnAtSkill")),
+                "price": _int(n.get("price")) if typ == "vendor" else cost,
+                "limited": bool(n.get("limitedStock")), "stock": _int(n.get("limitedStockCount")),
+                "not_on_list": bool(n.get("notOnListPlayersSaw")),
+                "drop_chance": None,
+                "rep": rep.get("name") if isinstance(rep, dict) else rep,
+                "extra_cost": n.get("costs") or None,
+                "seen": n.get("seenInForever"),
+                "quest_id": None, "npc_id": _int(n.get("npcId")),
+            }
+            byid[key] = rec
+            out.append(rec)
+    return out
