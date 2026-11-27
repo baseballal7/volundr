@@ -114,6 +114,11 @@ footer a{color:var(--gold)}
 .way:hover{background:rgba(201,162,39,.2);color:var(--gold-hi)}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#151b25;border:1px solid var(--gold-lo);color:var(--gold-hi);font-family:var(--mono);font-size:12px;padding:8px 14px;border-radius:9px;z-index:50;opacity:0;transition:.2s;pointer-events:none;max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #toast.on{opacity:1}
+.mapwrap{position:relative;display:inline-block;width:100%;max-width:501px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000;margin:8px 10px 6px 0;vertical-align:top;box-shadow:0 14px 30px -16px rgba(0,0,0,.8)}
+.mapwrap img{display:block;width:100%;height:auto}
+.mapwrap svg{position:absolute;inset:0;width:100%;height:100%}
+.mapwrap .cap{position:absolute;left:0;right:0;bottom:0;padding:4px 9px;font-family:var(--disp);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-hi);background:linear-gradient(0deg,rgba(7,9,13,.85),rgba(7,9,13,0))}
+.mapwrap.sm{max-width:340px}
 .stop{border-left:3px solid var(--gold-lo);padding-left:12px;margin:12px 0}
 .stop h4{font-family:var(--disp);font-size:13px;letter-spacing:.06em;color:var(--gold-hi)}
 .stop ul{margin:4px 0 0 0;padding-left:18px;font-size:12.5px}
@@ -157,6 +162,11 @@ let toastT=null;function toast(m){const t=$('#toast');t.textContent=m;t.classLis
 async function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(t);return true}}catch{}
   const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();let ok=false;try{ok=document.execCommand('copy')}catch{}document.body.removeChild(ta);return ok}
 document.addEventListener('click',async e=>{const b=e.target.closest('button.way');if(!b)return;e.stopPropagation();const ok=await copyText(b.dataset.way);toast((ok?'copied: ':'copy failed: ')+b.dataset.way)});
+// map panel: zone art + spawn highlight (every known spawn point, red) + pins. Coordinates are map percentages.
+function mapPanel(map,layers,cls){if(!map)return '';
+  const blobs=layers.filter(l=>l.points&&l.points.length).map(l=>`<g fill="${l.color||'rgba(248,81,73,.28)'}" stroke="${l.stroke||'rgba(248,81,73,.55)'}" stroke-width=".15">${l.points.map(p=>`<ellipse cx="${p[0]}" cy="${p[1]}" rx="1.9" ry="2.85"/>`).join('')}</g>`).join('');
+  const pins=layers.filter(l=>l.x!=null).map(l=>`<g><ellipse cx="${l.x}" cy="${l.y}" rx="1.1" ry="1.65" fill="${l.pin||'#f4d675'}" stroke="#0a0d12" stroke-width=".3"><title>${esc(l.label||'')}</title></ellipse>${l.text?`<text x="${l.x+1.6}" y="${l.y+.7}" font-size="2.6" fill="#eef2f8" stroke="#0a0d12" stroke-width=".35" paint-order="stroke" font-family="Inter">${esc(l.text)}</text>`:''}</g>`).join('');
+  return `<div class="mapwrap ${cls||''}"><img src="${esc(map.file)}" alt="${esc(map.name||'')}" loading="lazy"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${blobs}${pins}</svg><div class="cap">${esc(map.name||'')}</div></div>`}
 const loading=m=>V.innerHTML=`<div class="loadwrap"><div class="lmsg">${esc(m||'Reading the ledger')}</div><div class="loadbar"></div></div>`;
 const fail=e=>V.innerHTML=`<div class="card err"><b>Something broke</b><div class="hint" style="margin-top:6px">${esc(e.message||e)}</div></div>`;
 let HEALTH=null;
@@ -231,6 +241,7 @@ function renderRows(){const q=LQ.toLowerCase();const rows=LED.recipes.filter(r=>
     <td>${sk(r)}</td><td class="hint">${esc(r.category||'')}${r.tier?`<div class="hint" style="font-size:11px">${esc(r.tier)}</div>`:''}</td>
     <td>${r.sources.length?r.sources.map(srcChip).join(''):(r.other_faction?'<span class="chip c-drop">other faction only</span>':r.fdb?`<span class="chip c-unknown">${r.recipe_item?'from '+esc(r.recipe_item)+', source not recorded yet':'no source listed'}</span>`:'<span class="chip c-unknown">not in ForeverDB</span>')}</td>
     <td class="r">${r.known?'<span class="chip c-ok">✓</span>':''}</td></tr><tr id="d${r.recipe_id}" style="display:none"><td colspan="5"><div class="detail">${r.reagents&&r.reagents.length?'<b>Reagents:</b> <div class="rg">'+r.reagents.map(x=>`<span class="r">${esc(x.qty||x.quantity||x.count||'')}× ${esc(x.name||(x.item&&x.item.name)||x.itemName||x.id||'?')}</span>`).join('')+'</div>':'<span class="hint">no reagent data</span>'}
+    ${(()=>{const ms=r.sources.filter(s=>s.map&&(s.x!=null||(s.points&&s.points.length))).slice(0,3);return ms.length?'<div style="margin:6px 0 2px">'+ms.map(s=>mapPanel(s.map,[{points:s.type==='drop'?s.points:null},{x:s.x,y:s.y,label:s.name,text:s.name,pin:s.type==='drop'?'#ff8a84':'#f4d675'}],'sm')).join('')+'</div>':''})()}
     <div class="hint" style="margin-top:6px">${r.required_level?'requires level '+r.required_level+' · ':''}${r.changed_fields&&r.changed_fields.length?'changed from Classic: '+esc(r.changed_fields.join(', '))+' · ':''}Blizzard recipe #${r.recipe_id}${r.item_id?' · item #'+r.item_id:''}${r.fdb?(r.url?` · <a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--gold)">ForeverDB</a>`:' · ForeverDB matched'):' · no ForeverDB match (name/item differs or data not synced)'}</div></div></td></tr>`).join('')}</tbody></table>`}
 function toggle(id){const d=document.getElementById('d'+id);d.style.display=d.style.display==='none'?'':'none'}
 
@@ -250,7 +261,9 @@ async function zonesView(slug){loading('Unrolling the map');
     V.innerHTML=`<div class="card"><h3 class="sec" style="margin-top:0">By zone <span class="hint">every trainer, vendor and farm target with a waypoint, grouped by where you'd stand</span></h3>
       <div class="hint" style="margin-top:4px">⌖ copies a TomTom <code>/way</code> line. "All" copies one line per waypoint for the zone — paste them one at a time.</div></div>`+
       (zs.length?zs.map(z=>{const ways=[...z.stops.map(s=>s.x!=null?wayCmd(z.zone,s.x,s.y,s.name):null),...z.farm.map(f=>f.x!=null?wayCmd(z.zone,f.x,f.y,f.name):null)].filter(Boolean);
+        const layers=[...z.farm.filter(f=>f.points&&f.points.length).map(f=>({points:f.points})),...z.stops.filter(s=>s.x!=null).map(s=>({x:s.x,y:s.y,label:s.name,text:s.name,pin:'#f4d675'})),...z.farm.filter(f=>f.x!=null).map(f=>({x:f.x,y:f.y,label:f.name,text:f.name,pin:'#ff8a84'}))];
         return `<div class="card"><h3 class="sec" style="margin-top:0">${esc(z.zone)} <span class="hint">${z.stops.length} stop${z.stops.length!==1?'s':''} · ${z.farm.length} farm target${z.farm.length!==1?'s':''}</span>${ways.length?`<button class="way" data-way="${esc(ways.join('\n'))}" style="margin-left:auto">⌖ all (${ways.length})</button>`:''}</h3>
+        ${z.map?mapPanel(z.map,layers,''):''}
         ${z.stops.map(s=>`<div class="stop"><h4>${wayBtn(z.zone,s.x,s.y,s.name)} ${esc(title(s.type))} · ${esc(s.name)}${s.title?` <span class="hint" style="font-family:Inter;font-weight:400">${esc(s.title)}</span>`:''} <span class="hint">${s.x!=null?`(${s.x}, ${s.y})`:''}${s.seen?'':' · Classic data, unconfirmed'}${s.cost?' · '+money(s.cost):''}${Object.entries(s.currency||{}).map(([k,v])=>' · '+v.toLocaleString()+' '+esc(k)).join('')}</span></h4>
           <ul>${s.items.map(i=>`<li>${esc(i.recipe)} <span>(${esc(title(i.prof))}${i.skill?', skill '+i.skill:''}${i.price?', '+money(i.price):''}${(i.costs||[]).map(c=>', '+(c.amount||'')+' '+esc(c.name||'')).join('')})</span></li>`).join('')}</ul></div>`).join('')}
         ${z.farm.map(f=>`<div class="stop" style="border-left-color:rgba(248,81,73,.5)"><h4>${wayBtn(z.zone,f.x,f.y,f.name)} ${esc(f.kind==='object'?'Object':f.kind==='world drop'?'World drop':title(f.type))} · ${esc(f.name)} <span class="hint">${f.levels?`lvl ${f.levels[0]}–${f.levels[1]} · `:''}${f.x!=null?`(${f.x}, ${f.y})`:''}${f.spawns?` · ${f.spawns} spawns`:''}${(f.zones||[]).length>1?' · also '+esc(f.zones.filter(zz=>zz.zone!==z.zone).map(zz=>zz.zone).join(', ')):''}</span></h4>

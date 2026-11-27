@@ -25,6 +25,37 @@ VERSION = "0.1.0"
 
 app = FastAPI(title="Völundr")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# zone map art exported from the game client lives next to the DB (never in the repo)
+MAPS_DIR = os.path.join(os.path.dirname(DB) or ".", "maps")
+if os.path.isdir(MAPS_DIR):
+    app.mount("/maps", StaticFiles(directory=MAPS_DIR), name="maps")
+_maps_cache = {"t": 0, "idx": None}
+
+
+def maps_index() -> dict:
+    """{"by_area": {area: {name,file,w,h,uimap}}, "by_uimap": {uimap: area}} or empty."""
+    p = os.path.join(MAPS_DIR, "index.json")
+    if not os.path.exists(p):
+        return {"by_area": {}, "by_uimap": {}}
+    mt = os.path.getmtime(p)
+    if _maps_cache["idx"] is None or mt != _maps_cache["t"]:
+        raw = json.load(open(p, encoding="utf-8"))
+        _maps_cache["idx"] = {"by_area": {int(k): v for k, v in raw.get("by_area", {}).items()},
+                              "by_uimap": {int(k): int(v) for k, v in raw.get("by_uimap", {}).items()}}
+        _maps_cache["t"] = mt
+    return _maps_cache["idx"]
+
+
+def map_for(area=None, uimap=None):
+    idx = maps_index()
+    if area is None and uimap is not None:
+        area = idx["by_uimap"].get(int(uimap))
+    if area is None:
+        return None
+    v = idx["by_area"].get(int(area))
+    if not v:
+        return None
+    return {"area": int(area), "uimap": v.get("uimap"), "name": v.get("name"), "file": "/maps/" + v["file"], "w": v.get("w"), "h": v.get("h")}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chars(
@@ -43,7 +74,7 @@ CREATE TABLE IF NOT EXISTS fdb_recipes(
   orange INT, yellow INT, green INT, grey INT, category TEXT, sources TEXT, norm TEXT, raw TEXT, fetched REAL);
 CREATE TABLE IF NOT EXISTS npc_locations(
   npc_id INT PRIMARY KEY, name TEXT, sub TEXT, min_lvl INT, max_lvl INT, area INT, zone TEXT, x REAL, y REAL,
-  spawns INT, cluster INT, zones TEXT);
+  spawns INT, cluster INT, zones TEXT, points TEXT);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 CREATE INDEX IF NOT EXISTS ix_bnet_prof ON bnet_recipes(prof_slug);
 CREATE INDEX IF NOT EXISTS ix_fdb_prof ON fdb_recipes(prof_slug);
@@ -68,6 +99,9 @@ def init_db():
     with db() as con:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
+        cols = {r[1] for r in con.execute("PRAGMA table_info(npc_locations)")}
+        if "points" not in cols:
+            con.execute("ALTER TABLE npc_locations ADD COLUMN points TEXT")
 
 
 def meta_get(k, default=None):
@@ -253,7 +287,8 @@ def sync_questie() -> dict:
     rows = questie.build_locations(questie.parse_npcs(npc_lua), questie.parse_zone_names(zone_lua))
     with db() as con:
         con.execute("DELETE FROM npc_locations")
-        con.executemany("INSERT OR REPLACE INTO npc_locations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        con.executemany("INSERT OR REPLACE INTO npc_locations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    meta_set("area_uimap", json.dumps(questie.parse_area_uimap(zone_lua)))
     meta_set("questie_fetched", time.time())
     return {"npcs": len(rows)}
 
@@ -361,9 +396,22 @@ def enrich_sources(rows: list):
     loc = npc_lookup(ids)
     for r in rows:
         for s in r.get("sources", []):
+            if s.get("map_id") and s.get("x") is not None:          # ForeverDB trainers/vendors carry a UiMap id
+                m = map_for(uimap=s["map_id"])
+                if m:
+                    s["map"] = m
+                    s["points"] = [[s["x"], s["y"]]]
             L = loc.get(s.get("npc_id"))
             if not L:
                 continue
+            if L.get("area") and not s.get("map"):
+                m = map_for(area=L["area"])
+                if m:
+                    s["map"] = m
+                    try:
+                        s["points"] = json.loads(L.get("points") or "[]")
+                    except ValueError:
+                        s["points"] = []
             if not s.get("zone"):
                 s["zone"] = L["zone"]
             if s.get("x") is None and L["x"] is not None:
@@ -450,12 +498,14 @@ def next_session(slug: str) -> dict:
                     if s["type"] in ("trainer", "vendor"):
                         k = f"{s['type']}|{s['name']}|{s['zone']}"
                         st = cand.setdefault(k, {"type": s["type"], "name": s["name"], "title": s.get("title") or "", "zone": s["zone"],
-                                                 "x": s.get("x"), "y": s.get("y"), "seen": bool(s.get("seen")), "items": [], "cost": 0, "limited": False})
+                                                 "x": s.get("x"), "y": s.get("y"), "seen": bool(s.get("seen")), "map": s.get("map"),
+                                                 "items": [], "cost": 0, "limited": False})
                         offers.setdefault(rk, []).append((k, s, r, ps))
             elif r["group"] == "farm":
                 for s in r["sources"]:
                     farm.append({"recipe": r["name"], "prof": ps, "type": s["type"], "kind": s.get("kind"), "name": s["name"],
                                  "zone": s.get("zone") or "", "x": s.get("x"), "y": s.get("y"), "spawns": s.get("spawns"),
+                                 "map": s.get("map"), "points": s.get("points"),
                                  "levels": s.get("levels"), "zones": s.get("zones"), "drop_chance": s.get("drop_chance"),
                                  "chance": s.get("drop_chance"), "req": r["req"], "npc_id": s.get("npc_id"), "quest_id": s.get("quest_id")})
     def chance(x):
@@ -514,6 +564,8 @@ def next_session(slug: str) -> dict:
         seen_farm.add(key)
         z = zones.setdefault(f_["zone"] or "Unknown zone", {"zone": f_["zone"] or "Unknown zone", "stops": [], "farm": []})
         z["farm"].append(dict(f_, recipes=[{"recipe": f_["recipe"], "prof": f_["prof"], "chance": f_["chance"], "req": f_["req"]}]))
+    for z in zones.values():
+        z["map"] = next((o["map"] for o in z["stops"] + z["farm"] if o.get("map")), None)
     zone_list = sorted(zones.values(), key=lambda z: (z["zone"] == "Unknown zone", -(len(z["stops"]) + len(z["farm"])), z["zone"]))
     currency = {}
     for st in stops:
@@ -548,7 +600,7 @@ def index():
 def health():
     with db() as con:
         n = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("chars", "char_recipes", "bnet_recipes", "fdb_recipes", "npc_locations")}
-    return {"ok": True, "version": VERSION, "blizzard": bz.configured(), "foreverdb": fdb.configured(),
+    return {"ok": True, "version": VERSION, "blizzard": bz.configured(), "foreverdb": fdb.configured(), "maps": len(maps_index()["by_area"]),
             "static_ns": _ns(), "region": bz.REGION, "counts": n, "sync": SYNC}
 
 

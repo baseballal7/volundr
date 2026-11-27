@@ -129,6 +129,14 @@ def parse_zone_names(lua: str) -> dict:
     return names
 
 
+def parse_area_uimap(lua: str) -> dict:
+    """area id -> UiMap id (the id ForeverDB calls mapId on trainers/vendors)."""
+    out = {}
+    for m in re.finditer(r"^\s*\[(\d+)\]\s*=\s*(\d+)\s*,", lua, re.M):
+        out[int(m.group(1))] = int(m.group(2))
+    return out
+
+
 def best_spot(points: list) -> tuple:
     """Representative coordinate for a mob with many spawns: the centre of its densest cluster,
     so a /way lands in the middle of a pack rather than between two packs."""
@@ -164,7 +172,8 @@ def build_locations(npcs: dict, zone_names: dict) -> list:
         else:
             continue
         zones = [{"area": a, "zone": zn(a), "spawns": len(p)} for a, p in sorted((sp or n["spawns"]).items(), key=lambda kv: -len(kv[1]))]
-        rows.append((nid, n["name"], n["sub"], n["min"], n["max"], home, zn(home), x, y, nsp, cl, json.dumps(zones)))
+        pts = [[round(p[0], 1), round(p[1], 1)] for p in (sp.get(home) or [])][:300]
+        rows.append((nid, n["name"], n["sub"], n["min"], n["max"], home, zn(home), x, y, nsp, cl, json.dumps(zones), json.dumps(pts)))
     return rows
 
 
