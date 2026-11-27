@@ -5,7 +5,7 @@ Known recipes per character come from the Battle.net profile API (profile-foreve
 docs. Where/how to learn each missing recipe comes from ForeverDB.net. Everything is cached in
 one SQLite file; Blizzard docs are immutable per build, ForeverDB rows are refreshed weekly.
 """
-import os, json, time, sqlite3, threading, traceback
+import os, re, json, time, sqlite3, threading, traceback
 from contextlib import contextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -44,6 +44,24 @@ def maps_index() -> dict:
                               "by_uimap": {int(k): int(v) for k, v in raw.get("by_uimap", {}).items()}}
         _maps_cache["t"] = mt
     return _maps_cache["idx"]
+
+
+_names_cache = {"t": 0, "d": {}}
+
+
+def creature_names() -> dict:
+    """{npc_id: {"name","title"}} from tools/creaturecache.py output dropped next to the DB."""
+    p = os.path.join(os.path.dirname(DB) or ".", "creature_names.json")
+    if not os.path.exists(p):
+        return {}
+    mt = os.path.getmtime(p)
+    if mt != _names_cache["t"]:
+        try:
+            _names_cache["d"] = {int(k): v for k, v in json.load(open(p, encoding="utf-8")).items()}
+        except (ValueError, OSError):
+            _names_cache["d"] = {}
+        _names_cache["t"] = mt
+    return _names_cache["d"]
 
 
 def map_for(area=None, uimap=None):
@@ -394,8 +412,15 @@ def enrich_sources(rows: list):
     """Give drop sources (and anything else lacking coordinates) a zone and x/y from QuestieDB."""
     ids = {s.get("npc_id") for r in rows for s in r.get("sources", []) if s.get("npc_id") and (s.get("x") is None or not s.get("zone"))}
     loc = npc_lookup(ids)
+    names = creature_names()
     for r in rows:
         for s in r.get("sources", []):
+            nm = names.get(s.get("npc_id")) if s.get("npc_id") else None
+            if nm and (not s.get("name") or re.fullmatch(r"NPC \d+", s.get("name") or "")):
+                s["name"] = nm["name"]
+                if nm.get("title") and not s.get("title"):
+                    s["title"] = nm["title"]
+                s["name_from"] = "client cache"
             if s.get("map_id") and s.get("x") is not None:          # ForeverDB trainers/vendors carry a UiMap id
                 m = map_for(uimap=s["map_id"])
                 if m:
@@ -600,7 +625,7 @@ def index():
 def health():
     with db() as con:
         n = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("chars", "char_recipes", "bnet_recipes", "fdb_recipes", "npc_locations")}
-    return {"ok": True, "version": VERSION, "blizzard": bz.configured(), "foreverdb": fdb.configured(), "maps": len(maps_index()["by_area"]),
+    return {"ok": True, "version": VERSION, "blizzard": bz.configured(), "foreverdb": fdb.configured(), "maps": len(maps_index()["by_area"]), "creature_names": len(creature_names()),
             "static_ns": _ns(), "region": bz.REGION, "counts": n, "sync": SYNC}
 
 
