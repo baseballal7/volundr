@@ -5,3 +5,4 @@ __pycache__/
 !.env.example
 *.db
 data/
+tools/push_creature_names.ps1
